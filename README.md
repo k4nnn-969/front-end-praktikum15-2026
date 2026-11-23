@@ -29,7 +29,6 @@ Build Next.js menghasilkan situs statis ke folder `out`, sehingga bisa di-deploy
 
 ```bash
 npx vercel login
-npx vercel link
 npm run build
 npx vercel deploy ./out --prod
 ```
