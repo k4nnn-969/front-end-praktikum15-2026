@@ -11,6 +11,7 @@ import {
 import styles from "./page.module.css";
 
 type TaskStatus = "Belum mulai" | "Dikerjakan" | "Selesai";
+type StatusFilter = "Semua" | "Aktif" | TaskStatus;
 type Priority = "Santai" | "Normal" | "Penting";
 
 type Task = {
@@ -128,6 +129,12 @@ const statusClass: Record<TaskStatus, string> = {
   Selesai: styles.completed,
 };
 
+const priorityClass: Record<Priority, string> = {
+  Santai: styles.priorityLow,
+  Normal: styles.priorityNormal,
+  Penting: styles.priorityHigh,
+};
+
 function formatDueDate(date: string) {
   return new Intl.DateTimeFormat("id-ID", {
     day: "numeric",
@@ -191,7 +198,7 @@ function TaskDialog({
       <form className={styles.taskForm} onSubmit={handleSubmit}>
         <div className={styles.dialogHeading}>
           <div>
-            <p className={styles.eyebrow}>RUANG KERJA</p>
+            <p className={styles.eyebrow}>TUGAS</p>
             <h2 id="dialog-title">{task ? "Edit tugas" : "Tugas baru"}</h2>
           </div>
           <button
@@ -217,7 +224,7 @@ function TaskDialog({
         </label>
 
         <label className={styles.field}>
-          <span>Nama proyek</span>
+          <span>Proyek</span>
           <input
             defaultValue={task?.project ?? ""}
             name="project"
@@ -231,7 +238,7 @@ function TaskDialog({
           <label className={styles.field}>
             <span>Tenggat</span>
             <input
-              defaultValue={task?.dueDate ?? "2026-11-30"}
+              defaultValue={task?.dueDate ?? new Date().toISOString().slice(0, 10)}
               name="dueDate"
               type="date"
               required
@@ -277,7 +284,7 @@ function TaskDialog({
             Batal
           </button>
           <button className={styles.primaryButton} type="submit">
-            {task ? "Simpan perubahan" : "Buat tugas"}
+            {task ? "Simpan" : "Buat tugas"}
           </button>
         </div>
       </form>
@@ -293,7 +300,14 @@ export default function Home() {
   );
   const [dialogTask, setDialogTask] = useState<Task | null | undefined>();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("Semua tugas");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("Semua");
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const projects = useMemo(
+    () => Array.from(new Set(tasks.map((task) => task.project))).sort(),
+    [tasks],
+  );
 
   const visibleTasks = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("id");
@@ -303,16 +317,33 @@ export default function Home() {
         `${task.title} ${task.project} ${task.assignee}`
           .toLocaleLowerCase("id")
           .includes(normalizedQuery);
-      const matchesFilter =
-        filter === "Semua tugas" ||
-        (filter === "Sedang berjalan" && task.status === "Dikerjakan") ||
-        (filter === "Selesai" && task.status === "Selesai");
-      return matchesQuery && matchesFilter;
+      const matchesStatus =
+        statusFilter === "Semua" ||
+        (statusFilter === "Aktif" && task.status !== "Selesai") ||
+        task.status === statusFilter;
+      const matchesProject = !projectFilter || task.project === projectFilter;
+      return matchesQuery && matchesStatus && matchesProject;
     });
-  }, [filter, query, tasks]);
+  }, [projectFilter, query, statusFilter, tasks]);
 
   const activeCount = tasks.filter((task) => task.status !== "Selesai").length;
   const completedCount = tasks.filter((task) => task.status === "Selesai").length;
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      const target = event.target;
+      const isTyping =
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+      if (event.key === "/" && !isTyping && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   function saveTask(values: Omit<Task, "id">) {
     if (dialogTask) {
@@ -336,257 +367,264 @@ export default function Home() {
     }
   }
 
+  function toggleTask(task: Task) {
+    updateTasks((current) =>
+      current.map((item) =>
+        item.id === task.id
+          ? {
+              ...item,
+              status: task.status === "Selesai" ? "Belum mulai" : "Selesai",
+            }
+          : item,
+      ),
+    );
+  }
+
+  function showProject(project: string | null) {
+    setProjectFilter(project);
+    setStatusFilter("Semua");
+    document.getElementById("tugas")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function resetFilters() {
+    setQuery("");
+    setStatusFilter("Semua");
+    setProjectFilter(null);
+  }
+
   return (
     <div className={styles.appShell}>
-      <aside className={styles.sidebar} aria-label="Navigasi utama">
-        <a className={styles.brand} href="#" aria-label="RuangRapi, beranda">
+      <header className={styles.topbar}>
+        <a className={styles.brand} href="#ringkasan">
           <span className={styles.brandMark} aria-hidden="true">
             r.
           </span>
-          <span className={styles.brandName}>ruangrapi</span>
+          <span>ruangrapi</span>
         </a>
-
-        <div className={styles.workspaceLabel}>WORKSPACE</div>
-        <div className={styles.workspaceSwitch}>
-          <span className={styles.workspaceAvatar}>S</span>
-          <span className={styles.workspaceText}>
-            <strong>Studio Kecil</strong>
-            <small>Tim kreatif</small>
-          </span>
-          <span className={styles.chevron} aria-hidden="true">
-            ⌄
-          </span>
-        </div>
-
-        <nav className={styles.navigation}>
-          <a className={`${styles.navLink} ${styles.navActive}`} href="#tugas">
-            <span aria-hidden="true">▦</span>
-            <span className={styles.navLabel}>Ringkasan</span>
-          </a>
-          <a className={styles.navLink} href="#tugas">
-            <span aria-hidden="true">◷</span>
-            <span className={styles.navLabel}>Tugas</span>
-            <span className={styles.navCount}>{tasks.length}</span>
-          </a>
-          <a className={styles.navLink} href="#proyek">
-            <span aria-hidden="true">▤</span>
-            <span className={styles.navLabel}>Proyek</span>
-          </a>
+        <nav className={styles.navigation} aria-label="Navigasi utama">
+          <a href="#ringkasan">Ringkasan</a>
+          <a href="#tugas">Tugas</a>
+          <a href="#proyek">Proyek</a>
         </nav>
-
-        <div className={styles.sidebarBottom}>
-          <div className={styles.sidebarNote}>
-            <span className={styles.noteIcon} aria-hidden="true">
-              ✳
-            </span>
-            <p>Pelan-pelan, yang penting selesai.</p>
-          </div>
-          <div className={styles.profileButton}>
-            <span className={styles.profileAvatar}>A</span>
-            <span className={styles.profileInfo}>
-              <strong>Aditya Putra</strong>
-              <small>Admin workspace</small>
-            </span>
-            <span className={styles.moreIcon} aria-hidden="true">
-              ···
-            </span>
-          </div>
+        <div className={styles.profile}>
+          <span className={styles.profileAvatar} aria-hidden="true">A</span>
+          <span>Aditya Putra</span>
         </div>
-      </aside>
+      </header>
 
-      <main className={styles.mainContent}>
-        <header className={styles.topbar}>
-          <div className={styles.breadcrumb}>
-            <span>Studio Kecil</span>
-            <span aria-hidden="true">/</span>
-            <strong>Ringkasan</strong>
-          </div>
-          <div className={styles.topbarRight}>
-            <span className={styles.todayLabel}>Senin, 23 November 2026</span>
-            <span
-              className={styles.mobileProfile}
-              aria-hidden="true"
-            >
-              A
-            </span>
-          </div>
-        </header>
+      <main className={styles.content}>
+        {storageError && (
+          <p className={styles.storageError} role="alert">
+            {storageError}
+          </p>
+        )}
 
-        <div className={styles.contentWrap}>
-          <section className={styles.welcomeRow} aria-labelledby="page-title">
-            <div>
-              <p className={styles.eyebrow}>SENIN, 23 NOVEMBER 2026</p>
-              <h1 id="page-title">Pagi, Aditya <span aria-hidden="true">☀</span></h1>
-              <p className={styles.welcomeSubtitle}>
-                Sedikit demi sedikit, pekerjaan hari ini beres.
-              </p>
-            </div>
-            <button
-              className={styles.primaryButton}
-              type="button"
-              onClick={() => setDialogTask(null)}
-            >
-              <span aria-hidden="true">＋</span> Buat tugas
-            </button>
-          </section>
-
-          {storageError && (
-            <p className={styles.storageError} role="alert">
-              {storageError}
+        <section className={styles.welcomeRow} id="ringkasan">
+          <div>
+            <p className={styles.eyebrow}>STUDIO KECIL</p>
+            <h1>Semua kerjaan, satu tempat.</h1>
+            <p className={styles.subtitle}>
+              Atur tugas tim tanpa bikin kepala penuh.
             </p>
-          )}
+          </div>
+          <button
+            className={styles.primaryButton}
+            type="button"
+            onClick={() => setDialogTask(null)}
+          >
+            <span aria-hidden="true">＋</span> Tugas baru
+          </button>
+        </section>
 
-          <section className={styles.statsGrid} aria-label="Ringkasan tugas">
-            <article className={styles.statCard}>
-              <span className={styles.statIcon + " " + styles.statIconOrange} aria-hidden="true">↗</span>
-              <div>
-                <p>Tugas aktif</p>
-                <strong>{activeCount.toString().padStart(2, "0")}</strong>
-                <small>yang masih perlu dikerjakan</small>
-              </div>
-              <span className={styles.statAccent} aria-hidden="true">↗</span>
-            </article>
-            <article className={styles.statCard}>
-              <span className={styles.statIcon + " " + styles.statIconGreen} aria-hidden="true">✓</span>
-              <div>
-                <p>Selesai minggu ini</p>
-                <strong>{completedCount.toString().padStart(2, "0")}</strong>
-                <small>rapi, satu per satu</small>
-              </div>
-              <span className={styles.statAccent + " " + styles.statAccentGreen} aria-hidden="true">↗</span>
-            </article>
-            <article className={`${styles.statCard} ${styles.focusCard}`}>
-              <div className={styles.focusCopy}>
-                <p>Fokus minggu ini</p>
-                <strong>Lebih sedikit, lebih baik.</strong>
-                <small>Jaga ritme, bukan cuma kecepatan.</small>
-              </div>
-              <span className={styles.focusFlower} aria-hidden="true">✳</span>
-            </article>
-          </section>
+        <section className={styles.statsGrid} aria-label="Ringkasan tugas">
+          <button
+            className={`${styles.statCard} ${statusFilter === "Aktif" ? styles.selectedStat : ""}`}
+            type="button"
+            aria-pressed={statusFilter === "Aktif"}
+            onClick={() => {
+              setStatusFilter(statusFilter === "Aktif" ? "Semua" : "Aktif");
+              setProjectFilter(null);
+            }}
+          >
+            <span className={`${styles.statIcon} ${styles.activeIcon}`} aria-hidden="true">
+              ↗
+            </span>
+            <span>
+              <span className={styles.statLabel}>Tugas aktif</span>
+              <strong>{activeCount.toString().padStart(2, "0")}</strong>
+            </span>
+            <span className={styles.statHint}>Tampilkan tugas aktif</span>
+          </button>
+          <button
+            className={`${styles.statCard} ${statusFilter === "Selesai" ? styles.selectedStat : ""}`}
+            type="button"
+            aria-pressed={statusFilter === "Selesai"}
+            onClick={() => {
+              setStatusFilter(statusFilter === "Selesai" ? "Semua" : "Selesai");
+              setProjectFilter(null);
+            }}
+          >
+            <span className={`${styles.statIcon} ${styles.doneIcon}`} aria-hidden="true">
+              ✓
+            </span>
+            <span>
+              <span className={styles.statLabel}>Tugas selesai</span>
+              <strong>{completedCount.toString().padStart(2, "0")}</strong>
+            </span>
+            <span className={styles.statHint}>Tampilkan tugas selesai</span>
+          </button>
+        </section>
 
-          <section className={styles.tasksSection} id="tugas" aria-labelledby="tasks-title">
-            <div className={styles.sectionHeading}>
-              <div>
-                <div className={styles.headingWithCount}>
-                  <h2 id="tasks-title">Daftar tugas</h2>
-                  <span className={styles.totalCount}>{tasks.length}</span>
-                </div>
-                <p>Yang sedang ada di meja kerja.</p>
-              </div>
-              <a className={styles.viewAll} href="#tugas">
-                Lihat semua <span aria-hidden="true">↗</span>
-              </a>
+        <section className={styles.tasksSection} id="tugas" aria-labelledby="tasks-title">
+          <div className={styles.sectionHeading}>
+            <div>
+              <h2 id="tasks-title">Daftar tugas</h2>
+              <p>{visibleTasks.length} dari {tasks.length} tugas</p>
             </div>
-
-            <div className={styles.toolbar}>
-              <label className={styles.searchBox}>
-                <span aria-hidden="true">⌕</span>
-                <span className={styles.visuallyHidden}>Cari tugas</span>
-                <input
-                  type="search"
-                  placeholder="Cari tugas atau proyek..."
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-                <kbd>/</kbd>
-              </label>
-              <label className={styles.filterBox}>
-                <span className={styles.visuallyHidden}>Filter tugas</span>
-                <select value={filter} onChange={(event) => setFilter(event.target.value)}>
-                  <option>Semua tugas</option>
-                  <option>Sedang berjalan</option>
-                  <option>Selesai</option>
-                </select>
-              </label>
-              <button
-                className={styles.addTaskButton}
-                type="button"
-                onClick={() => setDialogTask(null)}
-              >
-                <span aria-hidden="true">＋</span> Tugas baru
+            {(query || statusFilter !== "Semua" || projectFilter) && (
+              <button className={styles.resetButton} type="button" onClick={resetFilters}>
+                Hapus filter
               </button>
-            </div>
+            )}
+          </div>
 
-            <div className={styles.taskList} role="list" aria-label="Daftar tugas">
-              {visibleTasks.map((task) => (
-                <article className={styles.taskRow} key={task.id} role="listitem">
-                  <span className={styles.taskCheck} aria-hidden="true">
-                    {task.status === "Selesai" ? "✓" : ""}
-                  </span>
-                  <div className={styles.taskMain}>
-                    <h3>{task.title}</h3>
-                    <p>{task.project}</p>
-                  </div>
-                  <span
-                    className={`${styles.priority} ${
-                      task.priority === "Penting"
-                        ? styles.priorityHigh
-                        : task.priority === "Santai"
-                          ? styles.priorityLow
-                          : styles.priorityNormal
-                    }`}
-                  >
-                    <span aria-hidden="true">●</span> {task.priority}
-                  </span>
-                  <span className={`${styles.statusBadge} ${statusClass[task.status]}`}>
-                    {task.status}
-                  </span>
-                  <span className={styles.dueDate}>
-                    <span aria-hidden="true">◷</span> {formatDueDate(task.dueDate)}
-                  </span>
-                  <span className={styles.assignee} title={`Penanggung jawab: ${task.assignee}`}>
-                    {task.assignee.slice(0, 1).toUpperCase()}
-                  </span>
-                  <div className={styles.rowActions}>
-                    <button
-                      className={styles.iconButton}
-                      type="button"
-                      aria-label={`Edit ${task.title}`}
-                      onClick={() => setDialogTask(task)}
-                    >
-                      ↗
-                    </button>
-                    <button
-                      className={`${styles.iconButton} ${styles.deleteButton}`}
-                      type="button"
-                      aria-label={`Hapus ${task.title}`}
-                      onClick={() => deleteTask(task)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {visibleTasks.length === 0 && (
-                <div className={styles.emptyState}>
-                  <span aria-hidden="true">✳</span>
-                  <strong>Belum ada tugas di sini.</strong>
-                  <p>Coba ubah pencarian atau tambahkan tugas baru.</p>
+          <div className={styles.toolbar}>
+            <label className={styles.searchBox}>
+              <span aria-hidden="true">⌕</span>
+              <input
+                ref={searchRef}
+                type="search"
+                aria-label="Cari tugas"
+                placeholder="Cari tugas atau proyek..."
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <kbd aria-hidden="true">/</kbd>
+            </label>
+            <label className={styles.selectField}>
+              <span className={styles.visuallyHidden}>Filter status</span>
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value as StatusFilter)
+                }
+              >
+                <option value="Semua">Semua status</option>
+                <option value="Aktif">Tugas aktif</option>
+                <option value="Belum mulai">Belum mulai</option>
+                <option value="Dikerjakan">Dikerjakan</option>
+                <option value="Selesai">Selesai</option>
+              </select>
+            </label>
+            <label className={styles.selectField}>
+              <span className={styles.visuallyHidden}>Filter proyek</span>
+              <select
+                value={projectFilter ?? ""}
+                onChange={(event) => setProjectFilter(event.target.value || null)}
+              >
+                <option value="">Semua proyek</option>
+                {projects.map((project) => (
+                  <option key={project} value={project}>{project}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className={styles.taskList} role="list" aria-label="Daftar tugas">
+            {visibleTasks.map((task) => (
+              <article className={styles.taskRow} key={task.id} role="listitem">
+                <button
+                  className={`${styles.taskCheck} ${task.status === "Selesai" ? styles.checked : ""}`}
+                  type="button"
+                  aria-label={
+                    task.status === "Selesai"
+                      ? `Tandai ${task.title} belum selesai`
+                      : `Tandai ${task.title} selesai`
+                  }
+                  onClick={() => toggleTask(task)}
+                >
+                  {task.status === "Selesai" ? "✓" : ""}
+                </button>
+                <div className={styles.taskMain}>
+                  <h3 className={task.status === "Selesai" ? styles.taskDone : ""}>
+                    {task.title}
+                  </h3>
+                  <p>{task.project}</p>
                 </div>
-              )}
-            </div>
-            <p className={styles.listFooter}>
-              Menampilkan {visibleTasks.length} dari {tasks.length} tugas
-            </p>
-          </section>
+                <span className={`${styles.priority} ${priorityClass[task.priority]}`}>
+                  <span aria-hidden="true">●</span> {task.priority}
+                </span>
+                <span className={`${styles.statusBadge} ${statusClass[task.status]}`}>
+                  {task.status}
+                </span>
+                <span className={styles.dueDate}>{formatDueDate(task.dueDate)}</span>
+                <span className={styles.assignee} title={`Penanggung jawab: ${task.assignee}`}>
+                  {task.assignee.slice(0, 1).toUpperCase()}
+                </span>
+                <div className={styles.rowActions}>
+                  <button
+                    className={styles.textButton}
+                    type="button"
+                    onClick={() => setDialogTask(task)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className={`${styles.textButton} ${styles.deleteButton}`}
+                    type="button"
+                    onClick={() => deleteTask(task)}
+                  >
+                    Hapus
+                  </button>
+                </div>
+              </article>
+            ))}
+            {visibleTasks.length === 0 && (
+              <div className={styles.emptyState}>
+                <strong>Tugasnya tidak ditemukan.</strong>
+                <p>Ubah filter atau tambahkan tugas baru.</p>
+                <button className={styles.primaryButton} type="button" onClick={() => setDialogTask(null)}>
+                  Tugas baru
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
 
-          <section className={styles.projectsStrip} id="proyek">
+        <section className={styles.projectsSection} id="proyek" aria-labelledby="projects-title">
+          <div className={styles.sectionHeading}>
             <div>
-              <span className={styles.projectsDot} aria-hidden="true" />
-              <strong>Proyek yang lagi jalan</strong>
-              <span>Identitas Kopi Purnama</span>
-              <span>Website Taman Kota</span>
-              <span>Kampanye Pasar Minggu</span>
+              <h2 id="projects-title">Proyek</h2>
+              <p>Pilih proyek untuk melihat tugasnya.</p>
             </div>
-            <a href="#tugas">Buka proyek <span aria-hidden="true">→</span></a>
-          </section>
+          </div>
+          <div className={styles.projectList}>
+            <button
+              className={`${styles.projectChip} ${projectFilter === null ? styles.projectSelected : ""}`}
+              type="button"
+              aria-pressed={projectFilter === null}
+              onClick={() => showProject(null)}
+            >
+              Semua proyek <span>{tasks.length}</span>
+            </button>
+            {projects.map((project) => {
+              const count = tasks.filter((task) => task.project === project).length;
+              return (
+                <button
+                  className={`${styles.projectChip} ${projectFilter === project ? styles.projectSelected : ""}`}
+                  key={project}
+                  type="button"
+                  aria-pressed={projectFilter === project}
+                  onClick={() => showProject(project)}
+                >
+                  {project} <span>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
 
-          <footer className={styles.footer}>
-            <span>Dibuat dengan tenang di Studio Kecil.</span>
-            <span>Semua perubahan tersimpan otomatis.</span>
-          </footer>
-        </div>
+        <footer className={styles.footer}>Perubahan tersimpan otomatis di browser ini.</footer>
       </main>
 
       {dialogTask !== undefined && (

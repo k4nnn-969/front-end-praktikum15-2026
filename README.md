@@ -5,6 +5,8 @@ RuangRapi adalah dashboard ringan untuk tim kreatif kecil. Kelola daftar tugas, 
 ## Fitur
 
 - CRUD tugas: buat, lihat, cari/filter, edit, dan hapus.
+- Filter berdasarkan status dan proyek, serta tandai tugas selesai langsung dari daftar.
+- Tekan `/` untuk langsung mencari tugas.
 - Perubahan tersimpan otomatis di `localStorage` browser.
 - Layout responsif, navigasi keyboard, label formulir, dan dialog native yang aksesibel.
 - Data contoh langsung tersedia untuk mencoba dashboard.
