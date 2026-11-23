@@ -25,7 +25,14 @@ npm run lint
 npm run build
 ```
 
-Proyek ini menggunakan Next.js App Router dan siap diimpor sebagai project Next.js di Vercel.
+Build Next.js menghasilkan situs statis ke folder `out`, sehingga bisa di-deploy langsung ke Vercel:
+
+```bash
+npx vercel login
+npx vercel link
+npm run build
+npx vercel deploy ./out --prod
+```
 
 ## Bukti CRUD (localhost)
 
